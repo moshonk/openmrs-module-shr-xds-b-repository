@@ -15,6 +15,7 @@ import org.openmrs.api.AdministrationService;
 import org.openmrs.api.EncounterService;
 import org.openmrs.api.PatientService;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.shr.contenthandler.UnstructuredDataHandler;
 import org.openmrs.module.shr.contenthandler.api.CodedValue;
 import org.openmrs.module.shr.contenthandler.api.Content;
 import org.openmrs.module.shr.contenthandler.api.ContentHandler;
@@ -44,6 +45,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.openmrs.util.OpenmrsConstants.GLOBAL_PROPERTY_COMPLEX_OBS_DIR;
 import static org.springframework.util.Assert.notNull;
 import static org.mockito.Mockito.*;
 
@@ -95,6 +97,10 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
         as.saveGlobalProperty(gp3);
         GlobalProperty gp4 = new GlobalProperty(XDSbServiceConstants.XDS_REGISTRY_URL_GP, "http://localhost:8089/ws/xdsregistry");
         as.saveGlobalProperty(gp4);
+        GlobalProperty gp5 = new GlobalProperty("shr.contenthandler.unstructureddatahandler.key", "ContentObsHandler"); // it's UnstructuredDataHandler.UNSTRUCTURED_DATA_HANDLER_GLOBAL_PROP
+        as.saveGlobalProperty(gp5);
+        GlobalProperty gp6 = new GlobalProperty(GLOBAL_PROPERTY_COMPLEX_OBS_DIR, "test_complex_obs");
+        as.saveGlobalProperty(gp6);
     }
 
 	@Test
@@ -811,16 +817,11 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
         //sanity checks that the patient already has the source patient id
         Patient patient = Context.getPatientService().getPatient(2);
         assertEquals(2, patient.getIdentifiers().size());
-        assertEquals("101-6", patient.getPatientIdentifier("1.2.3").getIdentifier());
+        assertEquals("1111111111", patient.getPatientIdentifier("1.2.3").getIdentifier());
+        //assertEquals("101-6", patient.getPatientIdentifier("1.2.3").getIdentifier());
         //This is required so that the patient gets reloaded in the code we're testing for the bug
         //reported in TRUNK-https://issues.openmrs.org/browse/TRUNK-5089 to be reproduced.
         Context.evictFromSession(patient);
-
-        AdministrationService as = Context.getAdministrationService();
-        GlobalProperty gp = new GlobalProperty("shr.contenthandler.unstructureddatahandler.key", "ContentObsHandler");
-        as.saveGlobalProperty(gp);
-        gp = new GlobalProperty(OpenmrsConstants.GLOBAL_PROPERTY_COMPLEX_OBS_DIR, "test_complex_obs");
-        as.saveGlobalProperty(gp);
         ProvideAndRegisterDocumentSetRequestType request = parseRequestFromResourceName("provideAndRegRequest-patientWithExistingSourcePatientId.xml");
 
         XDSbService service = Context.getService(XDSbService.class);

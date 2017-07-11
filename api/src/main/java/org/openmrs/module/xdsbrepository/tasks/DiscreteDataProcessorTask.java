@@ -20,7 +20,7 @@ import org.openmrs.module.xdsbrepository.XDSbServiceConstants;
 import org.openmrs.module.xdsbrepository.exceptions.HydrateRoleProviderMapException;
 import org.openmrs.module.xdsbrepository.model.QueueItem;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -82,7 +82,7 @@ public class DiscreteDataProcessorTask implements Runnable {
 
         EncounterService es = Context.getEncounterService();
         ProviderService ps = Context.getProviderService();
-        Map<EncounterRole, Set<Provider>> providersByRole = new HashMap<EncounterRole, Set<Provider>>();
+        Map<EncounterRole, Set<Provider>> providersByRole = new LinkedHashMap<EncounterRole, Set<Provider>>();
 
         String[] role2Providers = roleProviderMap.split("\\|");
         for (int i = 0; i < role2Providers.length; i++) {
