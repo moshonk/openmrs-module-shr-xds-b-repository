@@ -611,7 +611,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			pro.setPerson(person);
 		} else {
 			// set the name to the id as that's add we have?
-			name = new PersonName(xcnComponents[0], "", "");
+			name = new PersonName(xcnComponents[0], "", xcnComponents[0]);
 			names.add(name);
 			person.setNames(names);
 			person = Context.getPersonService().savePerson(person);
