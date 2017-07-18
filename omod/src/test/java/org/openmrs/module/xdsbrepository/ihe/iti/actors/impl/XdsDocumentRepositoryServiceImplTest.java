@@ -42,6 +42,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.openmrs.util.OpenmrsConstants.GLOBAL_PROPERTY_COMPLEX_OBS_DIR;
 
 public class XdsDocumentRepositoryServiceImplTest extends BaseModuleContextSensitiveTest {
 
@@ -253,6 +254,12 @@ public class XdsDocumentRepositoryServiceImplTest extends BaseModuleContextSensi
     @Test
     public void provideAndRegisterDocumentSetB_shouldRespondWithXDSbSuccessCode() throws Exception {
         stubRegistry();
+
+        AdministrationService as = Context.getAdministrationService();
+        GlobalProperty gp1 = new GlobalProperty("shr.contenthandler.unstructureddatahandler.key", "ContentObsHandler"); // it's UnstructuredDataHandler.UNSTRUCTURED_DATA_HANDLER_GLOBAL_PROP
+        as.saveGlobalProperty(gp1);
+        GlobalProperty gp2 = new GlobalProperty(GLOBAL_PROPERTY_COMPLEX_OBS_DIR, "test_complex_obs");
+        as.saveGlobalProperty(gp2);
 
         XdsDocumentRepositoryServiceImpl service = new XdsDocumentRepositoryServiceImpl();
         ProvideAndRegisterDocumentSetRequestType request = parseRequestFromResourceName("provideAndRegRequest1.xml");
