@@ -810,6 +810,19 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
         }
     }
 
+    private static Set<String> getPatientIdentifiers(Patient patient, String identifierTypeName) {
+        Set<PatientIdentifier> patientIdentifiers = patient.getIdentifiers();
+        Set<String> selectedPatientIdentifiers = new HashSet<String>();
+        if (patientIdentifiers != null && patientIdentifiers.size() > 0) {
+            for (PatientIdentifier id : patientIdentifiers) {
+                if (identifierTypeName.equals(id.getIdentifierType().getName())) {
+                    selectedPatientIdentifiers.add(id.getIdentifier());
+                }
+            }
+        }
+        return selectedPatientIdentifiers;
+    }
+
     @Test
     public void provideAndRegisterDocumentSetB_shouldNotAddDuplcateIdsToAPatient() throws Exception {
         stubRegistry();
@@ -817,8 +830,8 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
         //sanity checks that the patient already has the source patient id
         Patient patient = Context.getPatientService().getPatient(2);
         assertEquals(2, patient.getIdentifiers().size());
-        assertEquals("1111111111", patient.getPatientIdentifier("1.2.3").getIdentifier());
-        //assertEquals("101-6", patient.getPatientIdentifier("1.2.3").getIdentifier());
+        assertTrue(getPatientIdentifiers(patient, "1.2.3").contains("1111111111"));
+        assertTrue(getPatientIdentifiers(patient, "1.2.3").contains("101-6"));
         //This is required so that the patient gets reloaded in the code we're testing for the bug
         //reported in TRUNK-https://issues.openmrs.org/browse/TRUNK-5089 to be reproduced.
         Context.evictFromSession(patient);
