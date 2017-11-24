@@ -651,7 +651,7 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
         String uniqueId = service.storeDocument(eo, request);
 
         assertEquals("2009.9.1.2455", uniqueId);
-        verify(mockHandler).saveContent(eq(ps.getPatient(2)), (Map<EncounterRole, Set<Provider>>) any(), eq(es.getEncounterType(1)), eq(expectedContent));
+        verify(mockHandler).saveContent(eq(ps.getPatient(2)), (Map<EncounterRole, Set<Provider>>) any(), eq(es.getEncounterType(1)), eq(expectedContent),null);
     }
 
     public void testValidateSuccess(String testDocument) throws Exception {
@@ -771,7 +771,7 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
     public class TestContentHandler1 implements ContentHandler {
 
         @Override
-        public Encounter saveContent(Patient patient, Map<EncounterRole, Set<Provider>> encounterRoleSetMap, EncounterType encounterType, Content content) {
+        public Encounter saveContent(Patient patient, Map<EncounterRole, Set<Provider>> encounterRoleSetMap, EncounterType encounterType, Content content, Encounter encounter) {
             return null;
         }
 
@@ -789,7 +789,7 @@ public class XDSbServiceTest extends BaseModuleContextSensitiveTest {
     public class TestContentHandler2 implements ContentHandler {
 
         @Override
-        public Encounter saveContent(Patient patient, Map<EncounterRole, Set<Provider>> encounterRoleSetMap, EncounterType encounterType, Content content) {
+        public Encounter saveContent(Patient patient, Map<EncounterRole, Set<Provider>> encounterRoleSetMap, EncounterType encounterType, Content content, Encounter encounter) {
             return null;
         }
 

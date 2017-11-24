@@ -45,4 +45,7 @@
 	    </property>
 	</bean>
 
+	<bean id="xdsbrepository.identifierMapper"
+		  class="org.openmrs.module.xdsbrepository.mapper.PatientIdentifierMapper"/>
+
 </beans>

@@ -24,4 +24,5 @@ public class XDSbServiceConstants {
 	public static final String ERROR_XDS_REPOSITORY_ERROR = "XDSRepositoryError";
 	public static final String XDS_HOME_COMMUNITY_ID = "xds-b-repository.homeCommunityId"; 
 
+	public static final String GP_LOCAL_PATIENT_IDENTIFIER_TYPE_MAP = "xds-b-repository.local_patient_identifierTypeMap.";
 }

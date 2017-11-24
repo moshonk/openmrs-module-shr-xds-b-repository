@@ -70,7 +70,7 @@ public class DiscreteDataProcessorTask implements Runnable {
         Map<EncounterRole, Set<Provider>> providersByRole = hydrateRoleProviderMap(roleProviderMap);
 
         // attempt discrete save
-        discreteHandler.saveContent(patient, providersByRole, encounterType, content);
+        discreteHandler.saveContent(patient, providersByRole, encounterType, content, null);
     }
 
     protected Map<EncounterRole, Set<Provider>> hydrateRoleProviderMap(String roleProviderMap) throws HydrateRoleProviderMapException {
