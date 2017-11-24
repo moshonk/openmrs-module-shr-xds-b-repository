@@ -27,7 +27,10 @@ import org.openmrs.module.xdsbrepository.XDSbServiceConstants;
 import org.openmrs.module.xdsbrepository.db.XDSbDAO;
 import org.openmrs.module.xdsbrepository.exceptions.CXParseException;
 import org.openmrs.module.xdsbrepository.exceptions.UnsupportedGenderException;
+import org.openmrs.module.xdsbrepository.mapper.PatientIdentifierMapper;
 import org.openmrs.module.xdsbrepository.model.QueueItem;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.xml.bind.JAXBException;
@@ -60,6 +63,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 	private XDSbDAO dao;
 
+	@Autowired
+	@Qualifier("xdsbrepository.identifierMapper")
+	private PatientIdentifierMapper identifierMapper;
 
 	final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
 
@@ -173,6 +179,8 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		} catch (JAXBException ex) {
 			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
 		} catch (RuntimeException ex) {
+			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
+		} catch (ParseException ex) {
 			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
 		} finally {
 			XDSAudit.setAuditLogger(Context.getService(AtnaAuditService.class).getLogger());
@@ -361,7 +369,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	/**
 	 * Store a document and return its UUID
 	 */
-	protected String storeDocument(ExtrinsicObjectType eot, ProvideAndRegisterDocumentSetRequestType request) throws JAXBException, XDSException, UnsupportedGenderException, ContentHandlerException {
+	protected String storeDocument(ExtrinsicObjectType eot, ProvideAndRegisterDocumentSetRequestType request) throws JAXBException, XDSException, UnsupportedGenderException, ContentHandlerException,ParseException {
 
 		String docId = eot.getId();
 		Map<String, ProvideAndRegisterDocumentSetRequestType.Document> docs = InfosetUtil.getDocuments(request);
@@ -392,9 +400,10 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		Patient patient = findOrCreatePatient(eot);
 		Map<EncounterRole, Set<Provider>> providersByRole = findOrCreateProvidersByRole(eot);
 		EncounterType encounterType = findOrCreateEncounterType(eot);
+		Encounter encounter = createEncounter(eot);
 
 		// always send to the default unstructured data handler
-		defaultHandler.saveContent(patient, providersByRole, encounterType, content);
+		defaultHandler.saveContent(patient, providersByRole, encounterType, content, encounter);
 		// If another handler exists send to that as well, do this async if config is set
 		if (discreteHandler != null) {
 			if (Context.getAdministrationService().getGlobalProperty(XDSbServiceConstants.XDS_REPOSITORY_DISCRETE_HANDLER_ASYNC, "false").equalsIgnoreCase("true")) {
@@ -408,7 +417,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 				XDSbService xdsService = Context.getService(XDSbService.class);
 				xdsService.queueDiscreteDataProcessing(qi);
 			} else {
-				discreteHandler.saveContent(patient, providersByRole, encounterType, content);
+				discreteHandler.saveContent(patient, providersByRole, encounterType, content, encounter);
 			}
 		}
 
@@ -455,18 +464,47 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		ClassificationType classCodeCT = this.getClassificationFromExtrinsicObject(XDSConstants.UUID_XDSDocumentEntry_classCode, eo);
 		String classCode = classCodeCT.getNodeRepresentation();
 
+		String encounter[] = eo.getId().split("/");
+
+		String encounterTypeName = encounter[2].replace("-"," ");
+
 		EncounterService es = Context.getEncounterService();
-		EncounterType encounterType = es.getEncounterType(classCode);
+		EncounterType encounterType = es.getEncounterType(encounterTypeName);
+
+		if (encounterType == null) {
+			es.getEncounterType(classCode);
+		}
 
 		if (encounterType == null) {
 			// create new encounter Type
 			encounterType = new EncounterType();
-			encounterType.setName(classCode);
+			encounterType.setName(encounterTypeName);
 			encounterType.setDescription("Created by XDS.b module.");
 			encounterType = es.saveEncounterType(encounterType);
 		}
 
 		return encounterType;
+	}
+
+	protected Encounter createEncounter(ExtrinsicObjectType eo) throws ParseException {
+		Encounter encounter = new Encounter();
+
+		String id[] = eo.getId().split("/");
+
+		LocationService locationService = Context.getLocationService();
+		Location encounterLocation = locationService.getLocation(id[0].replace("-"," "));
+
+		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		Date date = simpleDateFormat.parse(id[4]);
+
+		FormService formService = Context.getFormService();
+		Form encounterForm = formService.getForm(id[3].replace("-"," "));
+
+		encounter.setLocation(encounterLocation);
+		encounter.setEncounterDatetime(date);
+		encounter.setForm(encounterForm);
+
+		return encounter;
 	}
 
 	/**
@@ -675,14 +713,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		PatientService ps = Context.getPatientService();
 		// TODO: Is this correct, should we have patient identifier with the name as the assigning authority
-		PatientIdentifierType idType = ps.getPatientIdentifierTypeByName(id.getAssigningAuthority().getAssigningAuthorityId());
+		PatientIdentifierType idType = getIdentifierType(id, ps);
 		if (idType == null) {
-			// create new idType
-			idType = new PatientIdentifierType();
-			idType.setName(id.getAssigningAuthority().getAssigningAuthorityId());
-			idType.setDescription("ID type for assigning authority: '" + id.getAssigningAuthority().getAssigningAuthorityId() + "'. Created by the xds-b-repository module.");
-			idType.setValidator("");
-			idType = ps.savePatientIdentifierType(idType);
+			idType = createIdentifierType(id, ps);
 		}
 
 		List<Patient> patients = ps.getPatients(null, id.getIdentifier(), Collections.singletonList(idType), true);
@@ -717,24 +750,29 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		String patCX = InfosetUtil.getSlotValue(eo.getSlot(), XDSConstants.SLOT_NAME_SOURCE_PATIENT_ID, null);
 		Identifier id = parsePatientIdentifier(patCX);
 
+		PatientService ps = Context.getPatientService();
 		// Add the source identifier type if it does not exist!
-		PatientIdentifierType pit = Context.getPatientService().getPatientIdentifierTypeByName(id.getAssigningAuthority().getAssigningAuthorityId());
+		PatientIdentifierType pit = getIdentifierType(id,ps);
 		if (pit == null) {
-			pit = new PatientIdentifierType();
-			pit.setName(id.getAssigningAuthority().getAssigningAuthorityId());
-			pit.setDescription("Automatically created by OpenSHR XDS");
-			Context.getPatientService().savePatientIdentifierType(pit);
-
+ 			pit = createIdentifierType(id, ps);
 		}
 
 		// Does the patient already have this identifier?
 		boolean hasId = false;
 		for (PatientIdentifier pid : pat.getIdentifiers()) {
-			hasId |= pid.getIdentifierType().equals(pit) && pid.getIdentifier().equals(id.getIdentifier());
+			hasId = pid.getIdentifierType().equals(pit) && pid.getIdentifier().equals(id.getIdentifier());
 			if (hasId) break;
 		}
 		if (!hasId)
 			pat.addIdentifier(new PatientIdentifier(id.getIdentifier(), pit, Context.getLocationService().getDefaultLocation()));
+	}
+
+	private PatientIdentifierType createIdentifierType(Identifier id, PatientService ps) {
+		PatientIdentifierType idType = new PatientIdentifierType();
+		idType.setName(id.getAssigningAuthority().getAssigningAuthorityId());
+		idType.setDescription("ID type for assigning authority: '" + id.getAssigningAuthority().getAssigningAuthorityId() + "'. Created by the xds-b-repository module.");
+		idType.setValidator("");
+		return ps.savePatientIdentifierType(idType);
 	}
 
 
@@ -757,6 +795,26 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		}
 	}
 
+	private PatientIdentifierType getIdentifierType(Identifier id, PatientService ps) throws XDSException {
+		String domain = id.getAssigningAuthority().getAssigningAuthorityId();
+		PatientIdentifierType identifierType = null;
+
+		String identifierUuid = identifierMapper.getMappedLocalIdentifierTypeUuid(domain);
+		if (identifierUuid != null) {
+			identifierType = Context.getPatientService().getPatientIdentifierTypeByUuid(identifierUuid);
+		}
+
+		if (identifierType == null) {
+			identifierType = ps.getPatientIdentifierTypeByName(domain);
+		}
+
+		if (identifierType == null) {
+			identifierType = createIdentifierType(id, ps);
+		}
+
+		return identifierType;
+	}
+
 
 	/**
 	 * Create a new patient object from document metadata
@@ -774,16 +832,19 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		Map<String, SlotType1> slots = InfosetUtil.getSlotsFromRegistryObject(eo);
 		SlotType1 patInfoSlot = slots.get(XDSConstants.SLOT_NAME_SOURCE_PATIENT_INFO);
 		List<String> valueList = patInfoSlot.getValueList().getValue();
+		Location patientLocation = Context.getLocationService().getDefaultLocation();
 
 		SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
 		Patient pat = new Patient();
 
-		PatientIdentifier pi = new PatientIdentifier(patId, idType, Context.getLocationService().getDefaultLocation());
-		pat.addIdentifier(pi);
-
 		for (String val : valueList) {
 			if (val.startsWith("PID-3|")) {
 				// patient ID - ignore source patient id in favour of enterprise patient id
+				val = val.replace("PID-3|", "");
+				Identifier identifier = parsePatientIdentifier(val);
+				PatientIdentifierType identifierType = getIdentifierType(identifier, Context.getPatientService());
+				PatientIdentifier patientIdentifier = new PatientIdentifier(identifier.getIdentifier(), identifierType, Context.getLocationService().getDefaultLocation());
+				pat.addIdentifier(patientIdentifier);
 			} else if (val.startsWith("PID-5|")) {
 				// patient name
 				val = val.replace("PID-5|", "");
@@ -810,12 +871,17 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 				// patient address
 				val = val.replace("PID-11|", "");
 				String[] addrComponents = val.split("\\^", -1);
+				patientLocation = Context.getLocationService().getLocation(addrComponents[0]);
 				PersonAddress pa = createPatientAddress(addrComponents);
 				pat.addAddress(pa);
 			} else {
 				log.warn("Found an unknown value in the sourcePatientInfo slot: " + val);
 			}
 		}
+
+		PatientIdentifier pi = new PatientIdentifier(patId, idType, patientLocation);
+		pi.setPreferred(true);
+		pat.addIdentifier(pi);
 
 		if (pat.getGender() == null)
 			pat.setGender("U");
