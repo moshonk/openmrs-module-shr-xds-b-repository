@@ -37,6 +37,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<springVersion>4.1.4.RELEASE</springVersion>
         <contenthandlerVersion>3.0.1-SNAPSHOT</contenthandlerVersion>
+		<cdahandlerVersion>1.0.1-SNAPSHOT</cdahandlerVersion>
         <atnaVersion>1.0.1-SNAPSHOT</atnaVersion>
         <javaCompilerVersion>1.6</javaCompilerVersion>
 	</properties>

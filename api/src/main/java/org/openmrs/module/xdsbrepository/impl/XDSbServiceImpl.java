@@ -1,8 +1,10 @@
 package org.openmrs.module.xdsbrepository.impl;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.time.DateUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.solr.common.util.DateUtil;
 import org.dcm4che3.audit.AuditMessages.EventTypeCode;
 import org.dcm4che3.net.audit.AuditLogger;
 import org.dcm4chee.xds2.common.XDSConstants;
@@ -14,11 +16,14 @@ import org.dcm4chee.xds2.infoset.rim.*;
 import org.dcm4chee.xds2.infoset.util.DocumentRegistryPortTypeFactory;
 import org.dcm4chee.xds2.infoset.util.InfosetUtil;
 import org.dcm4chee.xds2.infoset.ws.registry.DocumentRegistryPortType;
+import org.dom4j.DocumentException;
 import org.openmrs.*;
 import org.openmrs.api.*;
 import org.openmrs.api.context.Context;
 import org.openmrs.api.impl.BaseOpenmrsService;
 import org.openmrs.module.shr.atna.api.AtnaAuditService;
+import org.openmrs.module.shr.cdahandler.api.CdaImportService;
+import org.openmrs.module.shr.cdahandler.exception.DocumentImportException;
 import org.openmrs.module.shr.contenthandler.UnstructuredDataHandler;
 import org.openmrs.module.shr.contenthandler.api.*;
 import org.openmrs.module.xdsbrepository.Identifier;
@@ -34,6 +39,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.xml.bind.JAXBException;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.MessageDigest;
@@ -182,11 +189,12 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
 		} catch (ParseException ex) {
 			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
+		} catch (DocumentImportException ex) {
+			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
 		} finally {
 			XDSAudit.setAuditLogger(Context.getService(AtnaAuditService.class).getLogger());
 			XDSAudit.logRepositoryImport(submissionSetUID, patID, info, wasSuccess);
 		}
-
 		return response;
 	}
 
@@ -369,7 +377,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	/**
 	 * Store a document and return its UUID
 	 */
-	protected String storeDocument(ExtrinsicObjectType eot, ProvideAndRegisterDocumentSetRequestType request) throws JAXBException, XDSException, UnsupportedGenderException, ContentHandlerException,ParseException {
+	protected String storeDocument(ExtrinsicObjectType eot, ProvideAndRegisterDocumentSetRequestType request) throws JAXBException, XDSException, UnsupportedGenderException, ContentHandlerException,ParseException, DocumentImportException {
 
 		String docId = eot.getId();
 		Map<String, ProvideAndRegisterDocumentSetRequestType.Document> docs = InfosetUtil.getDocuments(request);
@@ -394,6 +402,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		Content content = new Content(docUniqueId, document.getValue(), typeCode, formatCode, contentType);
 		ContentHandlerService chs = Context.getService(ContentHandlerService.class);
+		CdaImportService service = Context.getService(CdaImportService.class);
 		ContentHandler defaultHandler = chs.getDefaultUnstructuredHandler();
 		ContentHandler discreteHandler = chs.getContentHandler(typeCode, formatCode);
 
@@ -420,6 +429,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 				discreteHandler.saveContent(patient, providersByRole, encounterType, content, encounter);
 			}
 		}
+
+		InputStream myInputStream = new ByteArrayInputStream(document.getValue());
+		service.importDocument(myInputStream);
 
 		return docUniqueId;
 	}
@@ -486,16 +498,25 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		return encounterType;
 	}
 
-	protected Encounter createEncounter(ExtrinsicObjectType eo) throws ParseException {
+	protected Encounter createEncounter(ExtrinsicObjectType eo) throws ParseException, JAXBException {
 		Encounter encounter = new Encounter();
+
+		Map<String, SlotType1> slots = InfosetUtil.getSlotsFromRegistryObject(eo);
+		SlotType1 timeSlot = slots.get(XDSConstants.SLOT_NAME_SERVICE_START_TIME);
+		timeSlot.getValueList().getValue().get(0);
+
 
 		String id[] = eo.getId().split("/");
 
 		LocationService locationService = Context.getLocationService();
 		Location encounterLocation = locationService.getLocation(id[0].replace("-"," "));
 
-		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
-		Date date = simpleDateFormat.parse(id[4]);
+		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmm");
+		Date date = simpleDateFormat.parse(timeSlot.getValueList().getValue().get(0));
+		Date currentDate = new Date();
+
+		if(date.after(currentDate))
+			date  = currentDate;
 
 		FormService formService = Context.getFormService();
 		Form encounterForm = formService.getForm(id[3].replace("-"," "));
