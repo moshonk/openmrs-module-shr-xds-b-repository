@@ -32,6 +32,14 @@
   			<scope>provided</scope>
 		</dependency>
 
+		<dependency>
+			<groupId>org.openmrs.module</groupId>
+			<artifactId>shr-cdahandler-api</artifactId>
+			<version>${cdahandlerVersion}</version>
+			<type>jar</type>
+			<scope>provided</scope>
+		</dependency>
+
 		<!-- Audit Handler  -->
 		<dependency>
 			<groupId>org.openmrs.module</groupId>

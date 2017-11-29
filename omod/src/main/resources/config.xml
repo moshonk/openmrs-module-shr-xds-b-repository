@@ -34,6 +34,7 @@
 	<require_modules>
 		<require_module version="${contenthandlerVersion}">org.openmrs.module.shr-contenthandler</require_module>
 		<require_module version="${atnaVersion}">org.openmrs.module.shr-atna</require_module>
+		<require_module version="${cdahandlerVersion}">org.openmrs.module.shr-cdahandler</require_module>
 	</require_modules>
 	
 	<!-- Maps hibernate file's, if present -->
