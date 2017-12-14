@@ -478,10 +478,10 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		String encounter[] = eo.getId().split("/");
 
-		String encounterTypeName = encounter[2].replace("-"," ");
+		String encounterTypeUuid = encounter[2];
 
 		EncounterService es = Context.getEncounterService();
-		EncounterType encounterType = es.getEncounterType(encounterTypeName);
+		EncounterType encounterType = es.getEncounterTypeByUuid(encounterTypeUuid);
 
 		if (encounterType == null) {
 			es.getEncounterType(classCode);
@@ -490,7 +490,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		if (encounterType == null) {
 			// create new encounter Type
 			encounterType = new EncounterType();
-			encounterType.setName(encounterTypeName);
+			encounterType.setName(classCode);
 			encounterType.setDescription("Created by XDS.b module.");
 			encounterType = es.saveEncounterType(encounterType);
 		}
@@ -509,7 +509,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		String id[] = eo.getId().split("/");
 
 		LocationService locationService = Context.getLocationService();
-		Location encounterLocation = locationService.getLocation(id[0].replace("-"," "));
+		Location encounterLocation = locationService.getLocationByUuid(id[0]);
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmm");
 		Date date = simpleDateFormat.parse(timeSlot.getValueList().getValue().get(0));
@@ -519,7 +519,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			date  = currentDate;
 
 		FormService formService = Context.getFormService();
-		Form encounterForm = formService.getForm(id[3].replace("-"," "));
+		Form encounterForm = formService.getFormByUuid(id[3]);
 
 		encounter.setLocation(encounterLocation);
 		encounter.setEncounterDatetime(date);
