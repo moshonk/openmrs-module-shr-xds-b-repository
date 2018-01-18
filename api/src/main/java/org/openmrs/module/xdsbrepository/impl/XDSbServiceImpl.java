@@ -508,8 +508,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		String id[] = eo.getId().split("/");
 
-		LocationService locationService = Context.getLocationService();
-		Location encounterLocation = locationService.getLocationByUuid(id[0]);
+		Location encounterLocation = findOrCreateLocation(eo);
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmm");
 		Date date = simpleDateFormat.parse(timeSlot.getValueList().getValue().get(0));
@@ -518,14 +517,50 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		if(date.after(currentDate))
 			date  = currentDate;
 
-		FormService formService = Context.getFormService();
-		Form encounterForm = formService.getFormByUuid(id[3]);
+		Form encounterForm = findOrCreateForm(eo);
 
 		encounter.setLocation(encounterLocation);
 		encounter.setEncounterDatetime(date);
 		encounter.setForm(encounterForm);
 
 		return encounter;
+	}
+
+	protected Location findOrCreateLocation(ExtrinsicObjectType eo) {
+		String[] id = eo.getId().split("/");
+		if (id.length == 0) {
+			return null;
+		}
+		String locationId = eo.getId().split("/")[0];
+		LocationService locationService = Context.getLocationService();
+		Location encounterLocation = locationService.getLocationByUuid(locationId);
+		if (encounterLocation == null) {
+			encounterLocation = new Location();
+			encounterLocation.setName(locationId);
+			encounterLocation.setUuid(locationId);
+			encounterLocation = locationService.saveLocation(encounterLocation);
+		}
+
+		return encounterLocation;
+	}
+
+	protected Form findOrCreateForm(ExtrinsicObjectType eo) {
+		String[] id = eo.getId().split("/");
+		if (id.length < 4) {
+			return null;
+		}
+		String formId = eo.getId().split("/")[3];
+		FormService formService = Context.getFormService();
+		Form encounterForm = formService.getFormByUuid(formId);
+		if (encounterForm == null) {
+			encounterForm = new Form();
+			encounterForm.setName(formId);
+			encounterForm.setVersion(formId);
+			encounterForm.setUuid(formId);
+			encounterForm = formService.saveForm(encounterForm);
+		}
+
+		return encounterForm;
 	}
 
 	/**
@@ -865,6 +900,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 				Identifier identifier = parsePatientIdentifier(val);
 				PatientIdentifierType identifierType = getIdentifierType(identifier, Context.getPatientService());
 				PatientIdentifier patientIdentifier = new PatientIdentifier(identifier.getIdentifier(), identifierType, Context.getLocationService().getDefaultLocation());
+				if (identifierType.getName().equals("ECID")) {
+					patientIdentifier.setPreferred(true);
+				}
 				pat.addIdentifier(patientIdentifier);
 			} else if (val.startsWith("PID-5|")) {
 				// patient name
@@ -900,6 +938,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			}
 		}
 
+		if (patientLocation == null) {
+			patientLocation = Context.getLocationService().getDefaultLocation();
+		}
 		PatientIdentifier pi = new PatientIdentifier(patId, idType, patientLocation);
 		pi.setPreferred(true);
 		pat.addIdentifier(pi);
