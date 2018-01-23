@@ -1,10 +1,8 @@
 package org.openmrs.module.xdsbrepository.impl;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.time.DateUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.solr.common.util.DateUtil;
 import org.dcm4che3.audit.AuditMessages.EventTypeCode;
 import org.dcm4che3.net.audit.AuditLogger;
 import org.dcm4chee.xds2.common.XDSConstants;
@@ -16,7 +14,6 @@ import org.dcm4chee.xds2.infoset.rim.*;
 import org.dcm4chee.xds2.infoset.util.DocumentRegistryPortTypeFactory;
 import org.dcm4chee.xds2.infoset.util.InfosetUtil;
 import org.dcm4chee.xds2.infoset.ws.registry.DocumentRegistryPortType;
-import org.dom4j.DocumentException;
 import org.openmrs.*;
 import org.openmrs.api.*;
 import org.openmrs.api.context.Context;
@@ -67,6 +64,8 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	public static final String SLOT_NAME_CODING_SCHEME = "codingScheme";
 
 	private static final String ERROR_FAILURE = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure";
+
+	private static final String FORM_VERSION = "1";
 
 	private XDSbDAO dao;
 
@@ -478,13 +477,16 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		String encounter[] = eo.getId().split("/");
 
-		String encounterTypeUuid = encounter[2];
-
 		EncounterService es = Context.getEncounterService();
-		EncounterType encounterType = es.getEncounterTypeByUuid(encounterTypeUuid);
+		String encounterTypeUuid = "";
+		EncounterType encounterType = null;
+		if (encounter.length > 2) {
+			encounterTypeUuid = encounter[2];
+			encounterType = es.getEncounterTypeByUuid(encounterTypeUuid);
+		}
 
 		if (encounterType == null) {
-			es.getEncounterType(classCode);
+			encounterType = es.getEncounterType(classCode);
 		}
 
 		if (encounterType == null) {
@@ -492,6 +494,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			encounterType = new EncounterType();
 			encounterType.setName(classCode);
 			encounterType.setDescription("Created by XDS.b module.");
+			if (!encounterTypeUuid.equals("")) {
+				encounterType.setUuid(encounterTypeUuid);
+			}
 			encounterType = es.saveEncounterType(encounterType);
 		}
 
@@ -508,8 +513,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		String id[] = eo.getId().split("/");
 
-		LocationService locationService = Context.getLocationService();
-		Location encounterLocation = locationService.getLocationByUuid(id[0]);
+		Location encounterLocation = findOrCreateLocation(eo);
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmm");
 		Date date = simpleDateFormat.parse(timeSlot.getValueList().getValue().get(0));
@@ -518,14 +522,50 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		if(date.after(currentDate))
 			date  = currentDate;
 
-		FormService formService = Context.getFormService();
-		Form encounterForm = formService.getFormByUuid(id[3]);
+		Form encounterForm = findOrCreateForm(eo);
 
 		encounter.setLocation(encounterLocation);
 		encounter.setEncounterDatetime(date);
 		encounter.setForm(encounterForm);
 
 		return encounter;
+	}
+
+	protected Location findOrCreateLocation(ExtrinsicObjectType eo) {
+		String[] id = eo.getId().split("/");
+		if (id.length == 0) {
+			return null;
+		}
+		String locationId = eo.getId().split("/")[0];
+		LocationService locationService = Context.getLocationService();
+		Location encounterLocation = locationService.getLocationByUuid(locationId);
+		if (encounterLocation == null) {
+			encounterLocation = new Location();
+			encounterLocation.setName(locationId);
+			encounterLocation.setUuid(locationId);
+			encounterLocation = locationService.saveLocation(encounterLocation);
+		}
+
+		return encounterLocation;
+	}
+
+	protected Form findOrCreateForm(ExtrinsicObjectType eo) {
+		String[] id = eo.getId().split("/");
+		if (id.length < 4) {
+			return null;
+		}
+		String formId = eo.getId().split("/")[3];
+		FormService formService = Context.getFormService();
+		Form encounterForm = formService.getFormByUuid(formId);
+		if (encounterForm == null) {
+			encounterForm = new Form();
+			encounterForm.setName(formId);
+			encounterForm.setVersion(FORM_VERSION);
+			encounterForm.setUuid(formId);
+			encounterForm = formService.saveForm(encounterForm);
+		}
+
+		return encounterForm;
 	}
 
 	/**
@@ -865,6 +905,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 				Identifier identifier = parsePatientIdentifier(val);
 				PatientIdentifierType identifierType = getIdentifierType(identifier, Context.getPatientService());
 				PatientIdentifier patientIdentifier = new PatientIdentifier(identifier.getIdentifier(), identifierType, Context.getLocationService().getDefaultLocation());
+				if (identifierType.getName().equals("ECID")) {
+					patientIdentifier.setPreferred(true);
+				}
 				pat.addIdentifier(patientIdentifier);
 			} else if (val.startsWith("PID-5|")) {
 				// patient name
@@ -900,6 +943,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			}
 		}
 
+		if (patientLocation == null) {
+			patientLocation = Context.getLocationService().getDefaultLocation();
+		}
 		PatientIdentifier pi = new PatientIdentifier(patId, idType, patientLocation);
 		pi.setPreferred(true);
 		pat.addIdentifier(pi);
