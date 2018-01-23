@@ -1,10 +1,8 @@
 package org.openmrs.module.xdsbrepository.impl;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.time.DateUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.solr.common.util.DateUtil;
 import org.dcm4che3.audit.AuditMessages.EventTypeCode;
 import org.dcm4che3.net.audit.AuditLogger;
 import org.dcm4chee.xds2.common.XDSConstants;
@@ -16,7 +14,6 @@ import org.dcm4chee.xds2.infoset.rim.*;
 import org.dcm4chee.xds2.infoset.util.DocumentRegistryPortTypeFactory;
 import org.dcm4chee.xds2.infoset.util.InfosetUtil;
 import org.dcm4chee.xds2.infoset.ws.registry.DocumentRegistryPortType;
-import org.dom4j.DocumentException;
 import org.openmrs.*;
 import org.openmrs.api.*;
 import org.openmrs.api.context.Context;
@@ -67,6 +64,8 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	public static final String SLOT_NAME_CODING_SCHEME = "codingScheme";
 
 	private static final String ERROR_FAILURE = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure";
+
+	private static final String FORM_VERSION = "1";
 
 	private XDSbDAO dao;
 
@@ -478,13 +477,16 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 		String encounter[] = eo.getId().split("/");
 
-		String encounterTypeUuid = encounter[2];
-
 		EncounterService es = Context.getEncounterService();
-		EncounterType encounterType = es.getEncounterTypeByUuid(encounterTypeUuid);
+		String encounterTypeUuid = "";
+		EncounterType encounterType = null;
+		if (encounter.length > 2) {
+			encounterTypeUuid = encounter[2];
+			encounterType = es.getEncounterTypeByUuid(encounterTypeUuid);
+		}
 
 		if (encounterType == null) {
-			es.getEncounterType(classCode);
+			encounterType = es.getEncounterType(classCode);
 		}
 
 		if (encounterType == null) {
@@ -492,6 +494,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			encounterType = new EncounterType();
 			encounterType.setName(classCode);
 			encounterType.setDescription("Created by XDS.b module.");
+			if (!encounterTypeUuid.equals("")) {
+				encounterType.setUuid(encounterTypeUuid);
+			}
 			encounterType = es.saveEncounterType(encounterType);
 		}
 
@@ -555,7 +560,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		if (encounterForm == null) {
 			encounterForm = new Form();
 			encounterForm.setName(formId);
-			encounterForm.setVersion(formId);
+			encounterForm.setVersion(FORM_VERSION);
 			encounterForm.setUuid(formId);
 			encounterForm = formService.saveForm(encounterForm);
 		}
