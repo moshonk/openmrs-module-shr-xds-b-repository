@@ -34,9 +34,18 @@ import org.openmrs.module.xdsbrepository.model.QueueItem;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.transaction.annotation.Transactional;
+import org.w3c.dom.Document;
+import org.xml.sax.SAXException;
 
 import javax.xml.bind.JAXBException;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -189,6 +198,8 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		} catch (ParseException ex) {
 			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
 		} catch (DocumentImportException ex) {
+			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
+		} catch (XPathExpressionException ex) {
 			throw new XDSException(XDSException.XDS_ERR_REPOSITORY_ERROR, ex.getMessage(), ex);
 		} finally {
 			XDSAudit.setAuditLogger(Context.getService(AtnaAuditService.class).getLogger());
@@ -376,7 +387,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	/**
 	 * Store a document and return its UUID
 	 */
-	protected String storeDocument(ExtrinsicObjectType eot, ProvideAndRegisterDocumentSetRequestType request) throws JAXBException, XDSException, UnsupportedGenderException, ContentHandlerException,ParseException, DocumentImportException {
+	protected String storeDocument(ExtrinsicObjectType eot, ProvideAndRegisterDocumentSetRequestType request)
+			throws JAXBException, XDSException, UnsupportedGenderException, ContentHandlerException, ParseException,
+			DocumentImportException, XPathExpressionException {
 
 		String docId = eot.getId();
 		Map<String, ProvideAndRegisterDocumentSetRequestType.Document> docs = InfosetUtil.getDocuments(request);
@@ -408,7 +421,8 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		Patient patient = findOrCreatePatient(eot);
 		Map<EncounterRole, Set<Provider>> providersByRole = findOrCreateProvidersByRole(eot);
 		EncounterType encounterType = findOrCreateEncounterType(eot);
-		Encounter encounter = createEncounter(eot);
+		InputStream documentInputStream = new ByteArrayInputStream(document.getValue());
+		Encounter encounter = findOrCreateEncounter(eot, documentInputStream);
 
 		// always send to the default unstructured data handler
 		defaultHandler.saveContent(patient, providersByRole, encounterType, content, encounter);
@@ -503,15 +517,28 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		return encounterType;
 	}
 
-	protected Encounter createEncounter(ExtrinsicObjectType eo) throws ParseException, JAXBException {
-		Encounter encounter = new Encounter();
+	protected Encounter findOrCreateEncounter(ExtrinsicObjectType eo, InputStream documentInputStream)
+			throws ParseException, JAXBException, XPathExpressionException {
+		Encounter encounter = null;
+		String encounterUuid = "";
+		if (documentInputStream != null) {
+			encounterUuid = getEncounterUuidFromClinicalDoc(documentInputStream);
+			if (StringUtils.isNotBlank(encounterUuid)) {
+				encounter = Context.getEncounterService().getEncounterByUuid(encounterUuid);
+			}
+		}
+
+		if (encounter != null) {
+			return encounter;
+		}
+		encounter = new Encounter();
+		if (StringUtils.isNotBlank(encounterUuid)) {
+			encounter.setUuid(encounterUuid);
+		}
 
 		Map<String, SlotType1> slots = InfosetUtil.getSlotsFromRegistryObject(eo);
 		SlotType1 timeSlot = slots.get(XDSConstants.SLOT_NAME_SERVICE_START_TIME);
 		timeSlot.getValueList().getValue().get(0);
-
-
-		String id[] = eo.getId().split("/");
 
 		Location encounterLocation = findOrCreateLocation(eo);
 
@@ -523,12 +550,35 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			date  = currentDate;
 
 		Form encounterForm = findOrCreateForm(eo);
-
 		encounter.setLocation(encounterLocation);
 		encounter.setEncounterDatetime(date);
 		encounter.setForm(encounterForm);
 
 		return encounter;
+	}
+
+	private String getEncounterUuidFromClinicalDoc(InputStream documentInputStream) throws XPathExpressionException {
+		String encounterUuid = "";
+		try {
+			DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+			Document doc = builder.parse(documentInputStream);
+			XPath xpath = XPathFactory.newInstance().newXPath();
+			encounterUuid = xpath.compile("//ClinicalDocument/id/@extension").evaluate(doc);
+		} catch (SAXException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ParserConfigurationException e) {
+			e.printStackTrace();
+		}
+		//if the document id is complex of many data
+		if (StringUtils.isNotBlank(encounterUuid) && encounterUuid.contains("/")) {
+			String[] ids = encounterUuid.split("/");
+			if (ids.length > 1) {
+				encounterUuid = ids[1];
+			}
+		}
+		return encounterUuid;
 	}
 
 	protected Location findOrCreateLocation(ExtrinsicObjectType eo) {
