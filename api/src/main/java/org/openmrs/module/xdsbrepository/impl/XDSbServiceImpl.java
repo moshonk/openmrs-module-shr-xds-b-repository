@@ -615,6 +615,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		for (LocationAttribute tmpAttribute : encounterLocation.getAttributes()) {
 			if (tmpAttribute.getAttributeType().getUuid().equals(type.getUuid())) {
 				attribute = tmpAttribute;
+				break;
 			}
 		}
 
