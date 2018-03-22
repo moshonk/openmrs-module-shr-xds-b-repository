@@ -57,6 +57,9 @@ import java.util.*;
 import java.util.Date;
 import java.util.Map;
 
+import static org.openmrs.module.xdsbrepository.XDSbServiceConstants.LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_NAME;
+import static org.openmrs.module.xdsbrepository.XDSbServiceConstants.LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_UUID;
+
 @Transactional
 public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	
@@ -596,7 +599,47 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			encounterLocation = locationService.saveLocation(encounterLocation);
 		}
 
+		//set software version for location
+		VersionInfoType softwareVersion = eo.getContentVersionInfo();
+		if (softwareVersion != null) {
+			encounterLocation = setSoftwareVersionForLocation(softwareVersion, encounterLocation);
+		}
+
 		return encounterLocation;
+	}
+
+	private Location setSoftwareVersionForLocation(VersionInfoType softwareVersion, Location encounterLocation) {
+		LocationAttributeType type = getSoftwareVersionAttributeType();
+		LocationAttribute attribute = null;
+
+		for (LocationAttribute tmpAttribute : encounterLocation.getAttributes()) {
+			if (tmpAttribute.getAttributeType().getUuid().equals(type.getUuid())) {
+				attribute = tmpAttribute;
+			}
+		}
+
+		if (attribute == null) {
+			attribute = new LocationAttribute();
+			attribute.setAttributeType(type);
+			encounterLocation.addAttribute(attribute);
+		}
+
+		attribute.setValue(softwareVersion.getVersionName());
+		return Context.getLocationService().saveLocation(encounterLocation);
+	}
+
+	public LocationAttributeType getSoftwareVersionAttributeType() {
+		LocationService locationService = Context.getLocationService();
+		LocationAttributeType type = locationService
+				.getLocationAttributeTypeByUuid(LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_UUID);
+		if (type == null) {
+			type = new LocationAttributeType();
+			type.setName(LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_NAME);
+			type.setUuid(LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_UUID);
+			type.setDatatypeClassname( "org.openmrs.customdatatype.datatype.FreeTextDatatype" );
+			type = locationService.saveLocationAttributeType(type);
+		}
+		return type;
 	}
 
 	protected Form findOrCreateForm(ExtrinsicObjectType eo) {
