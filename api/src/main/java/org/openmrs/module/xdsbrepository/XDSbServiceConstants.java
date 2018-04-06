@@ -25,4 +25,8 @@ public class XDSbServiceConstants {
 	public static final String XDS_HOME_COMMUNITY_ID = "xds-b-repository.homeCommunityId"; 
 
 	public static final String GP_LOCAL_PATIENT_IDENTIFIER_TYPE_MAP = "xds-b-repository.local_patient_identifierTypeMap.";
+
+	//location attribute type
+	public static final String LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_UUID = "26dd75b4-31cb-44af-96e9-76844a31ab32";
+	public static final String LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_NAME = "Software version";
 }
