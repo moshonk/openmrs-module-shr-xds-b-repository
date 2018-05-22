@@ -633,10 +633,17 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		return result;
 	}
 
-	private Location createNewLocation(String locationUuid) {
+	private Location createNewLocation(String locationCode) {
 		LocationService locationService = Context.getLocationService();
 		Location result = new Location();
-		result.setName(locationUuid);
+		result.setName(locationCode);
+
+		LocationAttributeType type = locationService.getLocationAttributeTypeByUuid(getLocationLookupAttributeTypeUuid());
+		LocationAttribute attribute = new LocationAttribute();
+		attribute.setAttributeType(type);
+		attribute.setValue(locationCode);
+		result.addAttribute(attribute);
+
 		return locationService.saveLocation(result);
 	}
 
