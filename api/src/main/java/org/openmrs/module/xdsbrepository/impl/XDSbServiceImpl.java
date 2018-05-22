@@ -34,6 +34,7 @@ import org.openmrs.module.xdsbrepository.model.QueueItem;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
@@ -57,6 +58,7 @@ import java.util.*;
 import java.util.Date;
 import java.util.Map;
 
+import static org.openmrs.module.xdsbrepository.Utils.getLocationLookupAttributeTypeUuid;
 import static org.openmrs.module.xdsbrepository.XDSbServiceConstants.LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_NAME;
 import static org.openmrs.module.xdsbrepository.XDSbServiceConstants.LOCATION_ATTRIBUTE_TYPE_SOFTWARE_VERSION_UUID;
 
@@ -543,7 +545,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		SlotType1 timeSlot = slots.get(XDSConstants.SLOT_NAME_SERVICE_START_TIME);
 		timeSlot.getValueList().getValue().get(0);
 
-		Location encounterLocation = findOrCreateLocation(eo);
+		SlotType1 authorInstitution = getAuthorInstitutionSlot(eo);
+		Location encounterLocation = findOrCreateLocation(authorInstitution);
+		encounterLocation = setSoftwareVersionForLocation(encounterLocation, eo);
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmm");
 		Date date = simpleDateFormat.parse(timeSlot.getValueList().getValue().get(0));
@@ -558,6 +562,17 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		encounter.setForm(encounterForm);
 
 		return encounter;
+	}
+
+	private SlotType1 getAuthorInstitutionSlot(ExtrinsicObjectType eo) {
+		ClassificationType classification = getClassificationFromExtrinsicObject(XDSConstants.UUID_XDSDocumentEntry_author ,eo);
+		SlotType1 result = null;
+		for (SlotType1 slot : classification.getSlot()) {
+			if (slot.getName().equals(SLOT_NAME_AUTHOR_INSTITUTION)) {
+				result = slot;
+			}
+		}
+		return result;
 	}
 
 	private String getEncounterUuidFromClinicalDoc(InputStream documentInputStream) throws XPathExpressionException {
@@ -584,27 +599,52 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		return encounterUuid;
 	}
 
-	protected Location findOrCreateLocation(ExtrinsicObjectType eo) {
-		String[] id = eo.getId().split("/");
-		if (id.length == 0) {
-			return null;
-		}
-		String locationId = eo.getId().split("/")[0];
-		LocationService locationService = Context.getLocationService();
-		Location encounterLocation = locationService.getLocationByUuid(locationId);
-		if (encounterLocation == null) {
-			encounterLocation = new Location();
-			encounterLocation.setName(locationId);
-			encounterLocation.setUuid(locationId);
-			encounterLocation = locationService.saveLocation(encounterLocation);
-		}
+	private Location findOrCreateLocation(SlotType1 authorInstitution) {
+		String locationCode = getLocationCodeFromSlot(authorInstitution);
 
-		//set software version for location
+		Location encounterLocation = findLocationBySiteCode(locationCode);
+		if (encounterLocation == null) {
+			encounterLocation = createNewLocation(locationCode);
+		}
+		return encounterLocation;
+	}
+
+	private String getLocationCodeFromSlot(SlotType1 slot) {
+		String locationCode = "";
+		if (slot.getValueList() != null && !CollectionUtils.isEmpty(slot.getValueList().getValue())) {
+			locationCode = slot.getValueList().getValue().get(0);
+			if (locationCode.contains("^")) {
+				locationCode = locationCode.split("\\^")[9];
+			}
+		}
+		return locationCode;
+	}
+
+	private Location findLocationBySiteCode(String siteCode) {
+		Location result = null;
+		LocationService locationService = Context.getLocationService();
+		LocationAttributeType type = locationService.getLocationAttributeTypeByUuid(getLocationLookupAttributeTypeUuid());
+		Map<LocationAttributeType, Object> map = new HashMap();
+		map.put(type, siteCode);
+		List<Location> locations = locationService.getLocations(null, null, map, true, null, null);
+		if (!CollectionUtils.isEmpty(locations)) {
+			result = locations.get(0);
+		}
+		return result;
+	}
+
+	private Location createNewLocation(String locationUuid) {
+		LocationService locationService = Context.getLocationService();
+		Location result = new Location();
+		result.setName(locationUuid);
+		return locationService.saveLocation(result);
+	}
+
+	private Location setSoftwareVersionForLocation(Location encounterLocation, ExtrinsicObjectType eo) {
 		VersionInfoType softwareVersion = eo.getContentVersionInfo();
 		if (softwareVersion != null) {
 			encounterLocation = setSoftwareVersionForLocation(softwareVersion, encounterLocation);
 		}
-
 		return encounterLocation;
 	}
 

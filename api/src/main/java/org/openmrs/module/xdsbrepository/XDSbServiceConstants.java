@@ -13,6 +13,7 @@ public class XDSbServiceConstants {
 	public static final String XDS_REPOSITORY_AUTOCREATE_PATIENTS ="xds-b-repository.autoCreatePatients";
 	public static final String XDS_REPOSITORY_AUTOCREATE_PROVIDERS = "xds-b-repository.autoCreateProviders";
 	public static final String XDS_REPOSITORY_AUTOCREATE_LOCATIONS = "xds-b-repository.autoCreateLocations";
+	public static final String XDS_REPOSITORY_LOCATION_LOOKUP_ATTRIBUTE_TYPE = "xds-b-repository.locationAttribute.lookupType";
 	public static final String XDS_REPOSITORY_DISCRETE_HANDLER_ASYNC = "xds-b-repository.discreteHandler.async";
 	public static final String XDS_REPOSITORY_DISCRETE_HANDLER_ASYNC_POLL_PERIOD = "xds-b-repository.discreteHandler.asyncPollingPeriod";
 	public static final String XDS_REPOSITORY_DISCRETE_HANDLER_ASYNC_MAX_TASKS = "xds-b-repository.discreteHandler.asyncMaxTasks";
