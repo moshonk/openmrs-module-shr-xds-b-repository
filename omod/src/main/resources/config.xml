@@ -105,5 +105,10 @@
 		<description>This property specifies the maximum number of processor threads to run for processing discrete data. A good value to set this to is equal to 75% of the number of cores available on your server. It's good to leave some available to service incoming requests efficiently.</description>
 		<defaultValue>6</defaultValue>
 	</globalProperty>
+	<globalProperty>
+		<property>${project.parent.artifactId}.locationAttribute.lookupType</property>
+		<description>This property specifies the type of location attribute using to lookup location in the database.</description>
+		<defaultValue>6242bf19-207e-4076-9d28-9290525b8ed9</defaultValue>
+	</globalProperty>
 </module>
 
