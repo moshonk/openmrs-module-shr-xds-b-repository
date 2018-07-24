@@ -76,6 +76,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 	public static final String SLOT_NAME_AUTHOR_SPECIALITY = "authorSpecialty";
 	public static final String SLOT_NAME_AUTHOR_TELECOM = "authorTelecommunication";
 	public static final String SLOT_NAME_CODING_SCHEME = "codingScheme";
+	public static final String CDA_FORMAT_CODE = "CDAR2/IHE 1.0";
 
 	private static final String ERROR_FAILURE = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure";
 
@@ -188,7 +189,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			// Save each document
 			if (response.getStatus().equals(XDSConstants.XDS_B_STATUS_SUCCESS)) {
 				for (ExtrinsicObjectType eot : extrinsicObjects) {
-					this.storeDocument(eot, request);
+					if (isClassifiedAsCDA(eot)) {
+						this.storeDocument(eot, request);
+					}
 				}
 			}
 
@@ -211,6 +214,16 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			XDSAudit.logRepositoryImport(submissionSetUID, patID, info, wasSuccess);
 		}
 		return response;
+	}
+
+	protected boolean isClassifiedAsCDA(ExtrinsicObjectType eot) {
+		for (ClassificationType ct : eot.getClassification()) {
+			if (ct.getClassificationScheme().equalsIgnoreCase(XDSConstants.UUID_XDSDocumentEntry_formatCode) &&
+					ct.getNodeRepresentation().equalsIgnoreCase(CDA_FORMAT_CODE)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	protected void validateDocumentMatchMetadata(List<ExtrinsicObjectType> extrinsicObjects, Map<String, ProvideAndRegisterDocumentSetRequestType.Document> documents) throws XDSException {
