@@ -1,5 +1,9 @@
 package org.openmrs.module.xdsbrepository.impl;
 
+import ca.uhn.hl7v2.HL7Exception;
+import ca.uhn.hl7v2.model.v25.message.ORM_O01;
+import ca.uhn.hl7v2.parser.PipeParser;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -189,9 +193,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			// Save each document
 			if (response.getStatus().equals(XDSConstants.XDS_B_STATUS_SUCCESS)) {
 				for (ExtrinsicObjectType eot : extrinsicObjects) {
-					if (isClassifiedAsCDA(eot)) {
-						this.storeDocument(eot, request);
-					}
+					this.storeDocument(eot, request);
 				}
 			}
 
@@ -461,8 +463,10 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			}
 		}
 
-		InputStream myInputStream = new ByteArrayInputStream(document.getValue());
-		service.importDocument(myInputStream);
+		if (isClassifiedAsCDA(eot)) {
+			InputStream myInputStream = new ByteArrayInputStream(document.getValue());
+			service.importDocument(myInputStream);
+		}
 
 		return docUniqueId;
 	}
@@ -535,12 +539,13 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		return encounterType;
 	}
 
-	protected Encounter findOrCreateEncounter(ExtrinsicObjectType eo, InputStream documentInputStream)
-			throws ParseException, JAXBException, XPathExpressionException {
+	protected Encounter findOrCreateEncounter(ExtrinsicObjectType eot, InputStream documentInputStream)
+			throws JAXBException, XPathExpressionException, ParseException {
 		Encounter encounter = null;
 		String encounterUuid = "";
+
 		if (documentInputStream != null) {
-			encounterUuid = getEncounterUuidFromClinicalDoc(documentInputStream);
+			encounterUuid = getEncounterUuidFromDoc(eot, documentInputStream);
 			if (StringUtils.isNotBlank(encounterUuid)) {
 				encounter = Context.getEncounterService().getEncounterByUuid(encounterUuid);
 			}
@@ -549,18 +554,32 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		if (encounter != null) {
 			return encounter;
 		}
-		encounter = new Encounter();
+		return createNewEncounter(eot, encounterUuid);
+	}
+
+	private String getEncounterUuidFromDoc(ExtrinsicObjectType eot, InputStream documentInputStream) throws XPathExpressionException {
+		String encounterUuid;
+		if (isClassifiedAsCDA(eot)) {
+			encounterUuid = getEncounterUuidFromClinicalDoc(documentInputStream);
+		} else {
+			encounterUuid = getEncounterUuidFromLabOrderDoc(documentInputStream);
+		}
+		return encounterUuid;
+	}
+
+	private Encounter createNewEncounter(ExtrinsicObjectType eot, String encounterUuid) throws JAXBException, ParseException {
+		Encounter encounter = new Encounter();
 		if (StringUtils.isNotBlank(encounterUuid)) {
 			encounter.setUuid(encounterUuid);
 		}
 
-		Map<String, SlotType1> slots = InfosetUtil.getSlotsFromRegistryObject(eo);
+		Map<String, SlotType1> slots = InfosetUtil.getSlotsFromRegistryObject(eot);
 		SlotType1 timeSlot = slots.get(XDSConstants.SLOT_NAME_SERVICE_START_TIME);
 		timeSlot.getValueList().getValue().get(0);
 
-		SlotType1 authorInstitution = getAuthorInstitutionSlot(eo);
+		SlotType1 authorInstitution = getAuthorInstitutionSlot(eot);
 		Location encounterLocation = findOrCreateLocation(authorInstitution);
-		encounterLocation = setSoftwareVersionForLocation(encounterLocation, eo);
+		encounterLocation = setSoftwareVersionForLocation(encounterLocation, eot);
 
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmm");
 		Date date = simpleDateFormat.parse(timeSlot.getValueList().getValue().get(0));
@@ -569,7 +588,7 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 		if(date.after(currentDate))
 			date  = currentDate;
 
-		Form encounterForm = findOrCreateForm(eo);
+		Form encounterForm = findOrCreateForm(eot);
 		encounter.setLocation(encounterLocation);
 		encounter.setEncounterDatetime(date);
 		encounter.setForm(encounterForm);
@@ -608,6 +627,23 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 			if (ids.length > 1) {
 				encounterUuid = ids[1];
 			}
+		}
+		return encounterUuid;
+	}
+
+	private String getEncounterUuidFromLabOrderDoc(InputStream documentInputStream) {
+		String encounterUuid = null;
+		PipeParser pipeParser = new PipeParser();
+		ORM_O01 orm_o01 = new ORM_O01();
+
+		try {
+			String content = IOUtils.toString(documentInputStream);
+			pipeParser.parse(orm_o01, content);
+			encounterUuid = orm_o01.getPATIENT().getPID().getPatientAccountNumber().getCheckDigit().getValue();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (HL7Exception e) {
+			e.printStackTrace();
 		}
 		return encounterUuid;
 	}
