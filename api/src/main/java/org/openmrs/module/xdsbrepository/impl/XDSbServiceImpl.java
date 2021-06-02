@@ -739,7 +739,9 @@ public class XDSbServiceImpl extends BaseOpenmrsService implements XDSbService {
 
 
 	private Identifier parsePatientIdentifier(String id) throws XDSException {
+		log.info("Id before " + id);
 		id = id.replaceAll("&amp;", "&");
+		log.info("Id after " + id);
 		try {
 			Identifier result = new Identifier(id);
 
